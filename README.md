@@ -5,6 +5,7 @@ Aplicacion web en Python para administrar pagos con interfaz moderna, filtros y 
 ## Funcionalidades
 
 - Crear, editar y eliminar pagos.
+- Campo de tipo de pago (service, subscription, tax, rent, salary, other).
 - Marcar pagos como pagados.
 - Estados de pago: pending, paid, overdue, cancelled.
 - Actualizacion automatica a overdue cuando vence un pago pendiente.

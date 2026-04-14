@@ -51,6 +51,7 @@
                 <th>Vence</th>
                 <th>Estado</th>
                 <th>Metodo</th>
+                <th>Tipo</th>
                 <th>Acciones</th>
             </tr>
         </thead>
@@ -65,6 +66,7 @@
                         <td>{{ payment.due_date }}</td>
                         <td><span class="chip {{ payment.status }}">{{ payment.status|capitalize }}</span></td>
                         <td>{{ payment.method }}</td>
+                        <td>{{ payment.payment_type|capitalize }}</td>
                         <td class="actions">
                             <a class="btn small" href="{{ url_for('edit_payment', payment_id=payment.id) }}">Editar</a>
 
@@ -82,7 +84,7 @@
                 {% endfor %}
             {% else %}
                 <tr>
-                    <td colspan="8" class="empty">No hay pagos registrados.</td>
+                    <td colspan="9" class="empty">No hay pagos registrados.</td>
                 </tr>
             {% endif %}
         </tbody>

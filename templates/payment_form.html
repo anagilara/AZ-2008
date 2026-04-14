@@ -43,6 +43,15 @@
             </select>
         </label>
 
+        <label>
+            Tipo
+            <select name="payment_type">
+                {% for item in type_options %}
+                    <option value="{{ item }}" {% if (payment.payment_type if payment else 'other') == item %}selected{% endif %}>{{ item|capitalize }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
         <label class="full">
             Notas
             <textarea name="notes" rows="4">{{ payment.notes if payment else '' }}</textarea>

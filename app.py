@@ -15,6 +15,7 @@ app.config["SECRET_KEY"] = "change-this-in-production"
 
 STATUS_OPTIONS = ["pending", "paid", "overdue", "cancelled"]
 METHOD_OPTIONS = ["bank-transfer", "credit-card", "debit-card", "cash", "other"]
+TYPE_OPTIONS = ["service", "subscription", "tax", "rent", "salary", "other"]
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -35,12 +36,23 @@ def init_db() -> None:
                 due_date TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'pending',
                 method TEXT NOT NULL DEFAULT 'other',
+                payment_type TEXT NOT NULL DEFAULT 'other',
                 notes TEXT,
                 paid_date TEXT,
                 created_at TEXT NOT NULL
             )
             """
         )
+
+
+def migrate_db() -> None:
+    with get_db_connection() as conn:
+        columns = conn.execute("PRAGMA table_info(payments)").fetchall()
+        existing_columns = {column[1] for column in columns}
+        if "payment_type" not in existing_columns:
+            conn.execute(
+                "ALTER TABLE payments ADD COLUMN payment_type TEXT NOT NULL DEFAULT 'other'"
+            )
 
 
 def refresh_overdue_statuses() -> None:
@@ -79,9 +91,9 @@ def index():
     params: list[str] = []
 
     if q:
-        query += " AND (payer LIKE ? OR concept LIKE ? OR notes LIKE ?)"
+        query += " AND (payer LIKE ? OR concept LIKE ? OR notes LIKE ? OR payment_type LIKE ?)"
         term = f"%{q}%"
-        params.extend([term, term, term])
+        params.extend([term, term, term, term])
 
     if status != "all":
         query += " AND status = ?"
@@ -123,6 +135,7 @@ def create_payment():
         due_date = request.form.get("due_date", "").strip()
         status = request.form.get("status", "pending").strip()
         method = request.form.get("method", "other").strip()
+        payment_type = request.form.get("payment_type", "other").strip()
         notes = request.form.get("notes", "").strip()
 
         if not payer or not concept or not due_date or amount is None:
@@ -139,6 +152,8 @@ def create_payment():
             status = "pending"
         if method not in METHOD_OPTIONS:
             method = "other"
+        if payment_type not in TYPE_OPTIONS:
+            payment_type = "other"
 
         paid_date = date.today().isoformat() if status == "paid" else None
 
@@ -146,8 +161,8 @@ def create_payment():
             conn.execute(
                 """
                 INSERT INTO payments
-                (payer, concept, amount, due_date, status, method, notes, paid_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (payer, concept, amount, due_date, status, method, payment_type, notes, paid_date, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payer,
@@ -156,6 +171,7 @@ def create_payment():
                     due_date,
                     status,
                     method,
+                    payment_type,
                     notes,
                     paid_date,
                     datetime.utcnow().isoformat(timespec="seconds"),
@@ -171,6 +187,7 @@ def create_payment():
         mode="create",
         status_options=STATUS_OPTIONS,
         method_options=METHOD_OPTIONS,
+        type_options=TYPE_OPTIONS,
     )
 
 
@@ -192,6 +209,7 @@ def edit_payment(payment_id: int):
         due_date = request.form.get("due_date", "").strip()
         status = request.form.get("status", "pending").strip()
         method = request.form.get("method", "other").strip()
+        payment_type = request.form.get("payment_type", "other").strip()
         notes = request.form.get("notes", "").strip()
 
         if not payer or not concept or not due_date or amount is None:
@@ -203,12 +221,15 @@ def edit_payment(payment_id: int):
                 payment_id=payment_id,
                 status_options=STATUS_OPTIONS,
                 method_options=METHOD_OPTIONS,
+                type_options=TYPE_OPTIONS,
             )
 
         if status not in STATUS_OPTIONS:
             status = "pending"
         if method not in METHOD_OPTIONS:
             method = "other"
+        if payment_type not in TYPE_OPTIONS:
+            payment_type = "other"
 
         paid_date = date.today().isoformat() if status == "paid" else None
 
@@ -217,7 +238,7 @@ def edit_payment(payment_id: int):
                 """
                 UPDATE payments
                 SET payer = ?, concept = ?, amount = ?, due_date = ?,
-                    status = ?, method = ?, notes = ?, paid_date = ?
+                    status = ?, method = ?, payment_type = ?, notes = ?, paid_date = ?
                 WHERE id = ?
                 """,
                 (
@@ -227,6 +248,7 @@ def edit_payment(payment_id: int):
                     due_date,
                     status,
                     method,
+                    payment_type,
                     notes,
                     paid_date,
                     payment_id,
@@ -243,6 +265,7 @@ def edit_payment(payment_id: int):
         payment_id=payment_id,
         status_options=STATUS_OPTIONS,
         method_options=METHOD_OPTIONS,
+        type_options=TYPE_OPTIONS,
     )
 
 
@@ -272,6 +295,7 @@ def delete_payment(payment_id: int):
 
 
 init_db()
+migrate_db()
 
 
 if __name__ == "__main__":

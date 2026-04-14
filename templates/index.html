@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="summary-grid">
+    <article class="card stat">
+        <p>Total de pagos</p>
+        <h2>{{ summary.total }}</h2>
+    </article>
+    <article class="card stat">
+        <p>Monto total</p>
+        <h2>${{ '%.2f'|format(summary.total_amount) }}</h2>
+    </article>
+    <article class="card stat paid">
+        <p>Pagado</p>
+        <h2>${{ '%.2f'|format(summary.total_paid) }}</h2>
+    </article>
+    <article class="card stat pending">
+        <p>Pendiente</p>
+        <h2>${{ '%.2f'|format(summary.total_pending) }}</h2>
+    </article>
+    <article class="card stat overdue">
+        <p>Vencido</p>
+        <h2>${{ '%.2f'|format(summary.total_overdue) }}</h2>
+    </article>
+</section>
+
+<section class="card filter-panel">
+    <form method="get" class="filter-form">
+        <input type="text" name="q" value="{{ q }}" placeholder="Buscar por cliente, concepto o notas">
+
+        <select name="status">
+            <option value="all" {% if status == 'all' %}selected{% endif %}>Todos los estados</option>
+            {% for item in status_options %}
+                <option value="{{ item }}" {% if status == item %}selected{% endif %}>{{ item|capitalize }}</option>
+            {% endfor %}
+        </select>
+
+        <button type="submit" class="btn">Filtrar</button>
+        <a href="{{ url_for('index') }}" class="btn btn-alt">Limpiar</a>
+    </form>
+</section>
+
+<section class="card table-wrap">
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>Concepto</th>
+                <th>Monto</th>
+                <th>Vence</th>
+                <th>Estado</th>
+                <th>Metodo</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if payments %}
+                {% for payment in payments %}
+                    <tr>
+                        <td>#{{ payment.id }}</td>
+                        <td>{{ payment.payer }}</td>
+                        <td>{{ payment.concept }}</td>
+                        <td>${{ '%.2f'|format(payment.amount) }}</td>
+                        <td>{{ payment.due_date }}</td>
+                        <td><span class="chip {{ payment.status }}">{{ payment.status|capitalize }}</span></td>
+                        <td>{{ payment.method }}</td>
+                        <td class="actions">
+                            <a class="btn small" href="{{ url_for('edit_payment', payment_id=payment.id) }}">Editar</a>
+
+                            {% if payment.status != 'paid' %}
+                                <form method="post" action="{{ url_for('mark_paid', payment_id=payment.id) }}">
+                                    <button type="submit" class="btn small success">Marcar pagado</button>
+                                </form>
+                            {% endif %}
+
+                            <form method="post" action="{{ url_for('delete_payment', payment_id=payment.id) }}" onsubmit="return confirm('Quieres eliminar este pago?');">
+                                <button type="submit" class="btn small danger">Eliminar</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="8" class="empty">No hay pagos registrados.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

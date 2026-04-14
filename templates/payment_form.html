@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<section class="card form-card">
+    <h2>{% if mode == 'edit' %}Editar{% else %}Nuevo{% endif %} pago</h2>
+
+    <form method="post" class="payment-form">
+        <label>
+            Cliente
+            <input type="text" name="payer" required value="{{ payment.payer if payment else '' }}">
+        </label>
+
+        <label>
+            Concepto
+            <input type="text" name="concept" required value="{{ payment.concept if payment else '' }}">
+        </label>
+
+        <label>
+            Monto
+            <input type="number" step="0.01" min="0" name="amount" required value="{{ payment.amount if payment else '' }}">
+        </label>
+
+        <label>
+            Fecha de vencimiento
+            <input type="date" name="due_date" required value="{{ payment.due_date if payment else '' }}">
+        </label>
+
+        <label>
+            Estado
+            <select name="status">
+                {% for item in status_options %}
+                    <option value="{{ item }}" {% if (payment.status if payment else 'pending') == item %}selected{% endif %}>{{ item|capitalize }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>
+            Metodo
+            <select name="method">
+                {% for item in method_options %}
+                    <option value="{{ item }}" {% if (payment.method if payment else 'other') == item %}selected{% endif %}>{{ item|capitalize }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label class="full">
+            Notas
+            <textarea name="notes" rows="4">{{ payment.notes if payment else '' }}</textarea>
+        </label>
+
+        <div class="form-actions full">
+            <button type="submit" class="btn">Guardar</button>
+            <a class="btn btn-alt" href="{{ url_for('index') }}">Cancelar</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

@@ -1,4 +1,4 @@
-# Gestor de Pagos Web (Python)
+# Gestor de Pagos Web (Python) v2
 
 Aplicacion web en Python para administrar pagos con interfaz moderna, filtros y panel de resumen.
 

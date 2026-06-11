@@ -20,6 +20,7 @@ CATEGORY_OPTIONS = [
     "deportes",
     "belleza",
     "alimentos",
+    ""entretenimiento,
     "otros",
 ]
 

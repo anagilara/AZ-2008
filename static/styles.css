@@ -104,7 +104,7 @@ body {
 
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 12px;
 }
 
@@ -184,7 +184,7 @@ td {
     padding: 12px;
     border-bottom: 1px solid var(--line);
     text-align: left;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 th {

@@ -1,18 +1,15 @@
-# Gestor de Pagos Web (Python) v2
+# Gestor de Productos Web (Python)
 
-Aplicacion web en Python para administrar pagos con interfaz moderna, filtros y panel de resumen.
+Aplicacion web en Python para administrar productos con operaciones CRUD, filtros y panel de resumen de inventario.
 
 ## Funcionalidades
 
-- Crear, editar y eliminar pagos.
-- Campo de tipo de pago (service, subscription, tax, rent, salary, other).
-- Marcar pagos como pagados.
-- Estados de pago: pending, paid, overdue, cancelled.
-- Actualizacion automatica a overdue cuando vence un pago pendiente.
-- Busqueda por cliente, concepto o notas.
-- Filtro por estado.
-- Resumen con montos total, pagado, pendiente y vencido.
-- Persistencia en SQLite (archivo local payments.db).
+- Crear, editar y eliminar productos.
+- Campos de producto: nombre, SKU unico, categoria, precio, stock y descripcion.
+- Busqueda por nombre, SKU, categoria o descripcion.
+- Filtro por categoria.
+- Resumen con total de productos, unidades en stock, valor de inventario y productos con stock bajo.
+- Persistencia en SQLite (archivo local products.db).
 
 ## Requisitos
 
@@ -40,6 +37,12 @@ Aplicacion web en Python para administrar pagos con interfaz moderna, filtros y 
 
 	http://127.0.0.1:5000
 
+## Pruebas unitarias
+
+Ejecutar pruebas con pytest:
+
+	pytest -q
+
 ## Estructura
 
 - app.py: Backend Flask y rutas.
@@ -50,4 +53,4 @@ Aplicacion web en Python para administrar pagos con interfaz moderna, filtros y 
 ## Notas
 
 - La base de datos SQLite se crea automaticamente al iniciar.
-- El archivo payments.db esta excluido en .gitignore.
+- El archivo products.db esta excluido en .gitignore.

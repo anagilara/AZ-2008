@@ -1,21 +1,27 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 from flask import Flask, flash, redirect, render_template, request, url_for
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "payments.db"
+DB_PATH = BASE_DIR / "products.db"
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "change-this-in-production"
+app.config["_db_initialized"] = False
 
-
-STATUS_OPTIONS = ["pending", "paid", "overdue", "cancelled"]
-METHOD_OPTIONS = ["bank-transfer", "credit-card", "debit-card", "cash", "other"]
-TYPE_OPTIONS = ["service", "subscription", "tax", "rent", "salary", "other"]
+CATEGORY_OPTIONS = [
+    "electronica",
+    "hogar",
+    "ropa",
+    "deportes",
+    "belleza",
+    "alimentos",
+    "otros",
+]
 
 
 def get_db_connection() -> sqlite3.Connection:
@@ -28,18 +34,16 @@ def init_db() -> None:
     with get_db_connection() as conn:
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS payments (
+            CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                payer TEXT NOT NULL,
-                concept TEXT NOT NULL,
-                amount REAL NOT NULL CHECK (amount >= 0),
-                due_date TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                method TEXT NOT NULL DEFAULT 'other',
-                payment_type TEXT NOT NULL DEFAULT 'other',
-                notes TEXT,
-                paid_date TEXT,
-                created_at TEXT NOT NULL
+                name TEXT NOT NULL,
+                sku TEXT NOT NULL UNIQUE,
+                category TEXT NOT NULL DEFAULT 'otros',
+                price REAL NOT NULL CHECK (price >= 0),
+                stock INTEGER NOT NULL CHECK (stock >= 0),
+                description TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             )
             """
         )
@@ -47,256 +51,229 @@ def init_db() -> None:
 
 def migrate_db() -> None:
     with get_db_connection() as conn:
-        columns = conn.execute("PRAGMA table_info(payments)").fetchall()
+        columns = conn.execute("PRAGMA table_info(products)").fetchall()
         existing_columns = {column[1] for column in columns}
-        if "payment_type" not in existing_columns:
+        if "updated_at" not in existing_columns:
             conn.execute(
-                "ALTER TABLE payments ADD COLUMN payment_type TEXT NOT NULL DEFAULT 'other'"
+                "ALTER TABLE products ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
             )
 
 
-def refresh_overdue_statuses() -> None:
-    today = date.today().isoformat()
-    with get_db_connection() as conn:
-        conn.execute(
-            """
-            UPDATE payments
-            SET status = 'overdue'
-            WHERE status = 'pending'
-            AND due_date < ?
-            """,
-            (today,),
-        )
+def setup_database() -> None:
+    init_db()
+    migrate_db()
 
 
-def parse_amount(raw_amount: str) -> float | None:
+@app.before_request
+def ensure_database_ready() -> None:
+    if app.config.get("_db_initialized"):
+        return
+    setup_database()
+    app.config["_db_initialized"] = True
+
+
+def parse_price(raw_price: str) -> float | None:
     try:
-        amount = float(raw_amount)
+        price = float(raw_price)
     except ValueError:
         return None
 
-    if amount < 0:
+    if price < 0:
         return None
-    return amount
+    return price
+
+
+def parse_stock(raw_stock: str) -> int | None:
+    try:
+        stock = int(raw_stock)
+    except ValueError:
+        return None
+
+    if stock < 0:
+        return None
+    return stock
 
 
 @app.route("/")
 def index():
-    refresh_overdue_statuses()
-
     q = request.args.get("q", "").strip()
-    status = request.args.get("status", "all").strip()
+    category = request.args.get("category", "all").strip()
 
-    query = "SELECT * FROM payments WHERE 1=1"
+    query = "SELECT * FROM products WHERE 1=1"
     params: list[str] = []
 
     if q:
-        query += " AND (payer LIKE ? OR concept LIKE ? OR notes LIKE ? OR payment_type LIKE ?)"
+        query += " AND (name LIKE ? OR sku LIKE ? OR category LIKE ? OR description LIKE ?)"
         term = f"%{q}%"
         params.extend([term, term, term, term])
 
-    if status != "all":
-        query += " AND status = ?"
-        params.append(status)
+    if category != "all":
+        query += " AND category = ?"
+        params.append(category)
 
-    query += " ORDER BY due_date ASC, created_at DESC"
+    query += " ORDER BY created_at DESC"
 
     with get_db_connection() as conn:
-        payments = conn.execute(query, params).fetchall()
+        products = conn.execute(query, params).fetchall()
 
         summary = conn.execute(
             """
             SELECT
                 COUNT(*) as total,
-                COALESCE(SUM(amount), 0) as total_amount,
-                COALESCE(SUM(CASE WHEN status = 'paid' THEN amount ELSE 0 END), 0) as total_paid,
-                COALESCE(SUM(CASE WHEN status = 'pending' THEN amount ELSE 0 END), 0) as total_pending,
-                COALESCE(SUM(CASE WHEN status = 'overdue' THEN amount ELSE 0 END), 0) as total_overdue
-            FROM payments
+                COALESCE(SUM(stock), 0) as total_stock,
+                COALESCE(SUM(price * stock), 0) as inventory_value,
+                COALESCE(SUM(CASE WHEN stock <= 5 THEN 1 ELSE 0 END), 0) as low_stock
+            FROM products
             """
         ).fetchone()
 
     return render_template(
         "index.html",
-        payments=payments,
+        products=products,
         summary=summary,
         q=q,
-        status=status,
-        status_options=STATUS_OPTIONS,
+        category=category,
+        category_options=CATEGORY_OPTIONS,
     )
 
 
-@app.route("/payments/new", methods=["GET", "POST"])
-def create_payment():
+@app.route("/products/new", methods=["GET", "POST"])
+def create_product():
     if request.method == "POST":
-        payer = request.form.get("payer", "").strip()
-        concept = request.form.get("concept", "").strip()
-        amount = parse_amount(request.form.get("amount", ""))
-        due_date = request.form.get("due_date", "").strip()
-        status = request.form.get("status", "pending").strip()
-        method = request.form.get("method", "other").strip()
-        payment_type = request.form.get("payment_type", "other").strip()
-        notes = request.form.get("notes", "").strip()
+        name = request.form.get("name", "").strip()
+        sku = request.form.get("sku", "").strip().upper()
+        category = request.form.get("category", "otros").strip()
+        price = parse_price(request.form.get("price", ""))
+        stock = parse_stock(request.form.get("stock", ""))
+        description = request.form.get("description", "").strip()
 
-        if not payer or not concept or not due_date or amount is None:
+        if not name or not sku or price is None or stock is None:
             flash("Completa los campos obligatorios con datos validos.", "error")
             return render_template(
                 "payment_form.html",
-                payment=request.form,
+                product=request.form,
                 mode="create",
-                status_options=STATUS_OPTIONS,
-                method_options=METHOD_OPTIONS,
+                category_options=CATEGORY_OPTIONS,
             )
 
-        if status not in STATUS_OPTIONS:
-            status = "pending"
-        if method not in METHOD_OPTIONS:
-            method = "other"
-        if payment_type not in TYPE_OPTIONS:
-            payment_type = "other"
+        if category not in CATEGORY_OPTIONS:
+            category = "otros"
 
-        paid_date = date.today().isoformat() if status == "paid" else None
+        timestamp = datetime.utcnow().isoformat(timespec="seconds")
 
         with get_db_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO payments
-                (payer, concept, amount, due_date, status, method, payment_type, notes, paid_date, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    payer,
-                    concept,
-                    amount,
-                    due_date,
-                    status,
-                    method,
-                    payment_type,
-                    notes,
-                    paid_date,
-                    datetime.utcnow().isoformat(timespec="seconds"),
-                ),
-            )
+            try:
+                conn.execute(
+                    """
+                    INSERT INTO products
+                    (name, sku, category, price, stock, description, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (name, sku, category, price, stock, description, timestamp, timestamp),
+                )
+            except sqlite3.IntegrityError:
+                flash("El SKU ya existe. Usa un SKU unico.", "error")
+                return render_template(
+                    "payment_form.html",
+                    product=request.form,
+                    mode="create",
+                    category_options=CATEGORY_OPTIONS,
+                )
 
-        flash("Pago creado correctamente.", "success")
+        flash("Producto creado correctamente.", "success")
         return redirect(url_for("index"))
 
     return render_template(
         "payment_form.html",
-        payment={},
+        product={},
         mode="create",
-        status_options=STATUS_OPTIONS,
-        method_options=METHOD_OPTIONS,
-        type_options=TYPE_OPTIONS,
+        category_options=CATEGORY_OPTIONS,
     )
 
 
-@app.route("/payments/<int:payment_id>/edit", methods=["GET", "POST"])
-def edit_payment(payment_id: int):
+@app.route("/products/<int:product_id>/edit", methods=["GET", "POST"])
+def edit_product(product_id: int):
     with get_db_connection() as conn:
-        payment = conn.execute(
-            "SELECT * FROM payments WHERE id = ?", (payment_id,)
+        product = conn.execute(
+            "SELECT * FROM products WHERE id = ?", (product_id,)
         ).fetchone()
 
-    if payment is None:
-        flash("El pago no existe.", "error")
+    if product is None:
+        flash("El producto no existe.", "error")
         return redirect(url_for("index"))
 
     if request.method == "POST":
-        payer = request.form.get("payer", "").strip()
-        concept = request.form.get("concept", "").strip()
-        amount = parse_amount(request.form.get("amount", ""))
-        due_date = request.form.get("due_date", "").strip()
-        status = request.form.get("status", "pending").strip()
-        method = request.form.get("method", "other").strip()
-        payment_type = request.form.get("payment_type", "other").strip()
-        notes = request.form.get("notes", "").strip()
+        name = request.form.get("name", "").strip()
+        sku = request.form.get("sku", "").strip().upper()
+        category = request.form.get("category", "otros").strip()
+        price = parse_price(request.form.get("price", ""))
+        stock = parse_stock(request.form.get("stock", ""))
+        description = request.form.get("description", "").strip()
 
-        if not payer or not concept or not due_date or amount is None:
+        if not name or not sku or price is None or stock is None:
             flash("Completa los campos obligatorios con datos validos.", "error")
             return render_template(
                 "payment_form.html",
-                payment=request.form,
+                product=request.form,
                 mode="edit",
-                payment_id=payment_id,
-                status_options=STATUS_OPTIONS,
-                method_options=METHOD_OPTIONS,
-                type_options=TYPE_OPTIONS,
+                product_id=product_id,
+                category_options=CATEGORY_OPTIONS,
             )
 
-        if status not in STATUS_OPTIONS:
-            status = "pending"
-        if method not in METHOD_OPTIONS:
-            method = "other"
-        if payment_type not in TYPE_OPTIONS:
-            payment_type = "other"
-
-        paid_date = date.today().isoformat() if status == "paid" else None
+        if category not in CATEGORY_OPTIONS:
+            category = "otros"
 
         with get_db_connection() as conn:
-            conn.execute(
-                """
-                UPDATE payments
-                SET payer = ?, concept = ?, amount = ?, due_date = ?,
-                    status = ?, method = ?, payment_type = ?, notes = ?, paid_date = ?
-                WHERE id = ?
-                """,
-                (
-                    payer,
-                    concept,
-                    amount,
-                    due_date,
-                    status,
-                    method,
-                    payment_type,
-                    notes,
-                    paid_date,
-                    payment_id,
-                ),
-            )
+            try:
+                conn.execute(
+                    """
+                    UPDATE products
+                    SET name = ?, sku = ?, category = ?, price = ?, stock = ?, description = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        name,
+                        sku,
+                        category,
+                        price,
+                        stock,
+                        description,
+                        datetime.utcnow().isoformat(timespec="seconds"),
+                        product_id,
+                    ),
+                )
+            except sqlite3.IntegrityError:
+                flash("El SKU ya existe. Usa un SKU unico.", "error")
+                return render_template(
+                    "payment_form.html",
+                    product=request.form,
+                    mode="edit",
+                    product_id=product_id,
+                    category_options=CATEGORY_OPTIONS,
+                )
 
-        flash("Pago actualizado correctamente.", "success")
+        flash("Producto actualizado correctamente.", "success")
         return redirect(url_for("index"))
 
     return render_template(
         "payment_form.html",
-        payment=payment,
+        product=product,
         mode="edit",
-        payment_id=payment_id,
-        status_options=STATUS_OPTIONS,
-        method_options=METHOD_OPTIONS,
-        type_options=TYPE_OPTIONS,
+        product_id=product_id,
+        category_options=CATEGORY_OPTIONS,
     )
 
 
-@app.route("/payments/<int:payment_id>/mark-paid", methods=["POST"])
-def mark_paid(payment_id: int):
+@app.route("/products/<int:product_id>/delete", methods=["POST"])
+def delete_product(product_id: int):
     with get_db_connection() as conn:
-        conn.execute(
-            """
-            UPDATE payments
-            SET status = 'paid', paid_date = ?
-            WHERE id = ?
-            """,
-            (date.today().isoformat(), payment_id),
-        )
+        conn.execute("DELETE FROM products WHERE id = ?", (product_id,))
 
-    flash("Pago marcado como pagado.", "success")
+    flash("Producto eliminado.", "success")
     return redirect(url_for("index"))
-
-
-@app.route("/payments/<int:payment_id>/delete", methods=["POST"])
-def delete_payment(payment_id: int):
-    with get_db_connection() as conn:
-        conn.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
-
-    flash("Pago eliminado.", "success")
-    return redirect(url_for("index"))
-
-
-init_db()
-migrate_db()
 
 
 if __name__ == "__main__":
+    setup_database()
+    app.config["_db_initialized"] = True
     app.run(debug=True)

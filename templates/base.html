@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or 'Gestor de Pagos' }}</title>
+    <title>{{ title or 'Gestor de Productos' }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -14,10 +14,10 @@
     <div class="bg-shape bg-shape-b"></div>
 
     <header class="topbar">
-        <h1>Gestor de Pagos</h1>
+        <h1>Gestor de Productos</h1>
         <nav>
             <a href="{{ url_for('index') }}">Inicio</a>
-            <a href="{{ url_for('create_payment') }}">Nuevo Pago</a>
+            <a href="{{ url_for('create_product') }}">Nuevo Producto</a>
         </nav>
     </header>
 

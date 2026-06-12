@@ -1,4 +1,4 @@
-# Gestor de Productos Web (Python)
+# Gestor de Productos Web (Python) v2
 
 Aplicacion web en Python para administrar productos con operaciones CRUD, filtros y panel de resumen de inventario.
 
